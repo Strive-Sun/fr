@@ -101,6 +101,7 @@ const char* log_severity_name(int severity) {
 // 自行添加的
 LoggingSettings::Callback g_callback = nullptr;
 void* g_user_data = nullptr;
+bool g_disable_rotate = false;
 
 int g_min_log_level = 0;
 
@@ -337,26 +338,28 @@ bool InitializeLogFileHandle() {
       }
     }
 
-    DWORD file_size = GetFileSize(g_log_file, nullptr);
-    // 如果 debug.log 文件大小超过 20M，则将 debug.log 的文件内容移动到 debug.log.1 中
-    if (file_size > 20 * 1024 * 1024) {
-      if (!g_log_file_name->empty()) {
-        // Release g_log_file to ensure MoveFileEx call succeeds
-        CloseHandle(g_log_file);
-        g_log_file = nullptr;
-        std::wstring g_log_file_name_1 = g_log_file_name->c_str();
-        g_log_file_name_1.append(L".1");
-        // If a file named lpNewFileName exists, the function replaces its
-        // contents with the contents of the lpExistingFileName file
-        if (!MoveFileEx(g_log_file_name->c_str(), g_log_file_name_1.c_str(),
-                        MOVEFILE_REPLACE_EXISTING)) {
-          return false;
+    if (!g_disable_rotate) {
+      DWORD file_size = GetFileSize(g_log_file, nullptr);
+      // 如果 debug.log 文件大小超过 20M，则将 debug.log 的文件内容移动到 debug.log.1 中
+      if (file_size > 20 * 1024 * 1024) {
+        if (!g_log_file_name->empty()) {
+          // Release g_log_file to ensure MoveFileEx call succeeds
+          CloseHandle(g_log_file);
+          g_log_file = nullptr;
+          std::wstring g_log_file_name_1 = g_log_file_name->c_str();
+          g_log_file_name_1.append(L".1");
+          // If a file named lpNewFileName exists, the function replaces its
+          // contents with the contents of the lpExistingFileName file
+          if (!MoveFileEx(g_log_file_name->c_str(), g_log_file_name_1.c_str(),
+                          MOVEFILE_REPLACE_EXISTING)) {
+            return false;
+          }
+          return InitializeLogFileHandle();
         }
-        return InitializeLogFileHandle();
       }
     }
 
-     if (!file_exist) {
+    if (!file_exist) {
       DWORD num_written;
       const char bom_header[] = {0xEF, 0xBB, 0xBF};
       // write BOM header at the beginning of the new log file
@@ -407,10 +410,12 @@ LoggingSettings::LoggingSettings()
     : logging_dest(LOG_DEFAULT),
       log_file(nullptr),
       lock_log(LOCK_LOG_FILE),
-      delete_old(APPEND_TO_OLD_LOG_FILE) {}
+      delete_old(APPEND_TO_OLD_LOG_FILE),
+      disable_rotate(false) {}
 
 bool BaseInitLoggingImpl(const LoggingSettings& settings) {
   g_callback = settings.callback;
+  g_disable_rotate = settings.disable_rotate;
 #if defined(OS_NACL)
   // Can log only to the system debug log.
   CHECK_EQ(settings.logging_dest & ~LOG_TO_SYSTEM_DEBUG_LOG, 0);

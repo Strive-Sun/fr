@@ -205,6 +205,7 @@ struct BASE_EXPORT LoggingSettings {
       std::function<void(std::string log, int severity, void* user_data)>;
   Callback callback = nullptr;
   void* user_data = nullptr;
+  bool disable_rotate = false;
 };
 
 // Define different names for the BaseInitLoggingImpl() function depending on
